@@ -11,7 +11,7 @@ import java.util.List;
 
 public class WidgetReadService extends AccessibilityService {
 
-    private int currentStep = 0; // 매크로 단계 (0: 대기, 1: 메인 분유클릭, 2: 목록 클릭, 3: 저장 및 복귀)
+    private int currentStep = 0;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -20,13 +20,13 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 🚨 자기 자신(우리 앱) 이벤트는 완전히 무시
+        // 자기 자신(우리 앱) 이벤트 무시
         if (pkg.equals(getPackageName())) return;
 
-        // 1. 원터치 분유 기록 매크로 실행 (베이비타임 앱 내부일 때만)
-        if (MainActivity.autoRecordPending && pkg.equals("com.daycare.babytime")) {
+        // 1. 원터치 분유 기록 매크로 실행 (베이비타임 내부일 때)
+        if (MainActivity.autoRecordPending && pkg.equals("yducky.application.babytime")) {
 
-            // STEP 1: 베이비타임 메인 -> '분유' 동그라미 터치
+            // STEP 1: 메인 화면에서 '분유' 클릭
             if (currentStep == 0) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -41,7 +41,7 @@ public class WidgetReadService extends AccessibilityService {
                     }
                 }, 800);
             }
-            // STEP 2: 상단에 추가된 새 '분유' 항목 클릭
+            // STEP 2: 수유 기록 추가 항목 선택
             else if (currentStep == 1) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -57,19 +57,17 @@ public class WidgetReadService extends AccessibilityService {
                     }
                 }, 1000);
             }
-            // STEP 3: 용량 입력 및 '저장' 후 우리 앱으로 복귀
+            // STEP 3: 용량 자동 입력 및 저장 후 앱 복귀
             else if (currentStep == 2) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
-                    // 선택된 용량 입력
                     AccessibilityNodeInfo editNode = findEditableNode(rootNode);
                     if (editNode != null) {
                         performSetText(editNode, MainActivity.selectedAmount);
                     }
 
-                    // 0.5초 뒤 '저장' 터치
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
                         if (saveRootNode == null) return;
@@ -81,7 +79,6 @@ public class WidgetReadService extends AccessibilityService {
                             }
                         }
 
-                        // 저장 완료 후 0.8초 뒤 우리 앱 화면으로 자동 복귀
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
                             Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
                             if (intent != null) {
@@ -99,7 +96,7 @@ public class WidgetReadService extends AccessibilityService {
             return;
         }
 
-        // 2. 외부 화면/위젯 수유 시간 실시간 감지 (우리 앱 제외)
+        // 2. 바탕화면 위젯 수유 시간 실시간 읽기
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
         findFormulaTime(rootNode);
@@ -110,20 +107,15 @@ public class WidgetReadService extends AccessibilityService {
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
 
-            // 예외 문구 필터링
-            if (text.contains("전화") || text.contains("빅스비") || text.contains("카메라") || 
-                text.contains("메시지") || text.contains("갤러리") || text.contains("설정") ||
-                text.contains("원터치") || text.contains("기록기")) {
+            // 우리 앱 내부 문구 감지 방지
+            if (text.contains("베이비타임 원터치") || text.contains("최근 수유") || text.contains("원터치 기록")) {
                 return;
             }
 
-            if (text.contains("분유") && (text.contains("전") || text.contains("분") || text.contains("시간"))) {
-                String formatted = text.replace("분유", "").trim();
-                if (!formatted.contains("시간")) {
-                    formatted = "0시간 " + formatted;
-                }
-                if (!formatted.endsWith("에 먹었어요")) {
-                    formatted = formatted + "에 먹었어요";
+            if ((text.contains("분유") || text.contains("수유")) && (text.contains("전") || text.contains("분") || text.contains("시간"))) {
+                String formatted = text;
+                if (!formatted.endsWith("에 먹었어요") && !formatted.endsWith("전")) {
+                    formatted = formatted + " 에 먹었어요";
                 }
 
                 String finalOutput = formatted;
