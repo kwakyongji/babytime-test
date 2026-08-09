@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
@@ -34,11 +35,14 @@ public class MainActivity extends AppCompatActivity {
         selectedAmount = amount;
         autoRecordPending = true;
 
-        // 베이비타임 어플 실행
+        Toast.makeText(this, amount + "ml 자동 기록을 시작합니다.", Toast.LENGTH_SHORT).show();
+
         Intent intent = getPackageManager().getLaunchIntentForPackage("com.daycare.babytime");
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
+        } else {
+            Toast.makeText(this, "베이비타임 앱이 설치되어 있지 않습니다.", Toast.LENGTH_LONG).show();
         }
     }
 }
