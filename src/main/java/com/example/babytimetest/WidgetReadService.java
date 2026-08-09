@@ -1,13 +1,13 @@
 package com.example.babytimetest;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,61 +22,34 @@ public class WidgetReadService extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
 
-        try {
-            // 분할 화면의 모든 윈도우(창) 수집
-            List<AccessibilityNodeInfo> rootNodes = getAllWindowRoots();
-            if (rootNodes.isEmpty()) return;
+        // 핵심: 베이비타임 패키지("yducky.application.babytime")의 이벤트일 때만 탐색 진행!
+        CharSequence pkg = event.getPackageName();
+        if (pkg == null || !pkg.toString().equals("yducky.application.babytime")) {
+            return;
+        }
 
-            // 1. 매크로 실행 (분할 화면)
+        try {
+            AccessibilityNodeInfo rootNode = event.getSource();
+            if (rootNode == null) {
+                rootNode = getRootInActiveWindow();
+            }
+            if (rootNode == null) return;
+
+            // 1. 원터치 매크로 실행
             if (MainActivity.autoRecordPending) {
-                for (AccessibilityNodeInfo root : rootNodes) {
-                    runSplitScreenMacro(root);
-                }
+                runSplitScreenMacro(rootNode);
             }
 
-            // 2. 실시간 '마지막 수유' 시간 읽기 (0.8초 주기)
+            // 2. 실시간 '마지막 수유' 시간 읽기 (1초 주기 쿨타임 적용)
             long currentTime = System.currentTimeMillis();
-            if (currentTime - lastReadTime > 800) {
+            if (currentTime - lastReadTime > 1000) {
                 lastReadTime = currentTime;
-                for (AccessibilityNodeInfo root : rootNodes) {
-                    if (extractLastFeedingTime(root)) {
-                        break; // 찾았으면 다른 창 탐색 종료
-                    }
-                }
+                extractLastFeedingTime(rootNode, 0);
             }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    // 분할 화면의 활성/비활성 창 노드를 모두 가져오는 메쏘드
-    private List<AccessibilityNodeInfo> getAllWindowRoots() {
-        List<AccessibilityNodeInfo> roots = new ArrayList<>();
-        try {
-            List<AccessibilityWindowInfo> windows = getWindows();
-            if (windows != null) {
-                for (AccessibilityWindowInfo window : windows) {
-                    if (window != null) {
-                        AccessibilityNodeInfo root = window.getRoot();
-                        if (root != null) {
-                            roots.add(root);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        // 윈도우 목록을 가져오지 못했을 때의 예외 처리
-        if (roots.isEmpty()) {
-            AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
-            if (activeRoot != null) {
-                roots.add(activeRoot);
-            }
-        }
-        return roots;
     }
 
     private void runSplitScreenMacro(AccessibilityNodeInfo rootNode) {
@@ -103,12 +76,11 @@ public class WidgetReadService extends AccessibilityService {
 
                 mainHandler.postDelayed(() -> {
                     try {
-                        List<AccessibilityNodeInfo> roots = getAllWindowRoots();
-                        for (AccessibilityNodeInfo root : roots) {
-                            AccessibilityNodeInfo saveNode = findNodeByText(root, "저장");
+                        AccessibilityNodeInfo currentRoot = getRootInActiveWindow();
+                        if (currentRoot != null) {
+                            AccessibilityNodeInfo saveNode = findNodeByText(currentRoot, "저장");
                             if (saveNode != null) {
                                 performClickParent(saveNode);
-                                break;
                             }
                         }
                     } catch (Exception ignored) {}
@@ -129,16 +101,17 @@ public class WidgetReadService extends AccessibilityService {
         }
     }
 
-    private boolean extractLastFeedingTime(AccessibilityNodeInfo node) {
-        if (node == null) return false;
+    // 트리 탐색 깊이 제한(depth <= 15)으로 스택 오버플로우 방지
+    private boolean extractLastFeedingTime(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 15) return false;
 
         try {
             if (node.getText() != null && node.getText().toString().trim().equals("마지막 수유")) {
                 AccessibilityNodeInfo parent = node.getParent();
                 if (parent != null) {
-                    String feedingTime = findTimeInNodeTree(parent);
+                    String feedingTime = findTimeInNodeTree(parent, 0);
                     if (feedingTime != null) {
-                        updateResultText(feedingTime + " 먹었어요");
+                        sendTimeBroadcast(feedingTime + " 먹었어요");
                         return true;
                     }
                 }
@@ -148,7 +121,7 @@ public class WidgetReadService extends AccessibilityService {
             for (int i = 0; i < childCount; i++) {
                 AccessibilityNodeInfo child = node.getChild(i);
                 if (child != null) {
-                    if (extractLastFeedingTime(child)) return true;
+                    if (extractLastFeedingTime(child, depth + 1)) return true;
                 }
             }
         } catch (Exception e) {
@@ -157,8 +130,8 @@ public class WidgetReadService extends AccessibilityService {
         return false;
     }
 
-    private String findTimeInNodeTree(AccessibilityNodeInfo node) {
-        if (node == null) return null;
+    private String findTimeInNodeTree(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 10) return null;
 
         try {
             if (node.getText() != null) {
@@ -176,7 +149,7 @@ public class WidgetReadService extends AccessibilityService {
             for (int i = 0; i < childCount; i++) {
                 AccessibilityNodeInfo child = node.getChild(i);
                 if (child != null) {
-                    String res = findTimeInNodeTree(child);
+                    String res = findTimeInNodeTree(child, depth + 1);
                     if (res != null) return res;
                 }
             }
@@ -255,10 +228,12 @@ public class WidgetReadService extends AccessibilityService {
         }
     }
 
-    private void updateResultText(String text) {
-        if (MainActivity.resultTextView != null) {
-            MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(text));
-        }
+    // MainActivity로 안전하게 방송을 전송하는 메서드
+    private void sendTimeBroadcast(String feedingTimeText) {
+        Intent intent = new Intent("com.example.babytimetest.UPDATE_TIME");
+        intent.putExtra("feeding_time", feedingTimeText);
+        intent.setPackage(getPackageName());
+        sendBroadcast(intent);
     }
 
     @Override
