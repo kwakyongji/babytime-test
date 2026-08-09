@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 public class WidgetReadService extends AccessibilityService {
 
     private int currentStep = 0;
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -22,15 +23,15 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 우리 앱 내부 이벤트는 완전히 무시
+        // 우리 앱 내부 이벤트는 무시
         if (pkg.equals(getPackageName())) return;
 
-        // 1. 원터치 분유 기록 매크로 실행 (베이비타임 내부일 때)
+        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 실행 중일 때)
         if (MainActivity.autoRecordPending && pkg.equals("yducky.application.babytime")) {
 
-            // STEP 1: 메인 화면에서 '분유' 클릭
+            // STEP 1: 메인 화면 상단 카테고리의 '분유' 버튼 클릭 (0ml 기록 생성)
             if (currentStep == 0) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                mainHandler.postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
@@ -41,36 +42,41 @@ public class WidgetReadService extends AccessibilityService {
                             break;
                         }
                     }
-                }, 800);
+                }, 600);
             }
-            // STEP 2: 수유 기록 추가 항목 선택
+            // STEP 2: 생성된 목록의 '0 ml' (또는 '0ml') 항목 터치하여 상세 수정창 진입
             else if (currentStep == 1) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                mainHandler.postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
-                    List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
-                    for (int i = formulaNodes.size() - 1; i >= 0; i--) {
-                        AccessibilityNodeInfo node = formulaNodes.get(i);
+                    List<AccessibilityNodeInfo> zeroNodes = rootNode.findAccessibilityNodeInfosByText("0 ml");
+                    if (zeroNodes.isEmpty()) {
+                        zeroNodes = rootNode.findAccessibilityNodeInfosByText("0ml");
+                    }
+
+                    for (AccessibilityNodeInfo node : zeroNodes) {
                         if (performClickParent(node)) {
                             currentStep = 2;
                             break;
                         }
                     }
-                }, 1000);
+                }, 800);
             }
-            // STEP 3: 용량 자동 입력 및 저장 후 앱 복귀
+            // STEP 3: 상세 화면에서 선택한 용량 입력 후 우측 상단 '저장' 클릭 및 앱 복귀
             else if (currentStep == 2) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                mainHandler.postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
+                    // 용량 입력창 찾아서 값 변경
                     AccessibilityNodeInfo editNode = findEditableNode(rootNode);
                     if (editNode != null) {
                         performSetText(editNode, MainActivity.selectedAmount);
                     }
 
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    // 용량 입력 후 '저장' 버튼 클릭
+                    mainHandler.postDelayed(() -> {
                         AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
                         if (saveRootNode == null) return;
 
@@ -81,7 +87,8 @@ public class WidgetReadService extends AccessibilityService {
                             }
                         }
 
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        // 작업 완료 후 우리 앱으로 복귀
+                        mainHandler.postDelayed(() -> {
                             Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
                             if (intent != null) {
                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -93,12 +100,12 @@ public class WidgetReadService extends AccessibilityService {
 
                     }, 500);
 
-                }, 1000);
+                }, 800);
             }
             return;
         }
 
-        // 2. 바탕화면 위젯 수유 시간 실시간 읽기 ("3시간 18분 전" 정교 감지)
+        // 2. 바탕화면 위젯 수유 시간 정교 읽기 ("3시간 18분 전" 감지)
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
         findFormulaTimeFromWidget(rootNode);
