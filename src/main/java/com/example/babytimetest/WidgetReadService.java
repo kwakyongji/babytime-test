@@ -15,6 +15,7 @@ public class WidgetReadService extends AccessibilityService {
 
     private int currentStep = 0;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean isProcessingMacro = false;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -23,115 +24,126 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 우리 앱 내부 이벤트는 무시
+        // 우리 앱 이벤트는 무시
         if (pkg.equals(getPackageName())) return;
 
-        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 실행 중일 때)
+        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 앱 내부)
         if (MainActivity.autoRecordPending && pkg.equals("yducky.application.babytime")) {
-
-            // STEP 1: 메인 화면 상단 카테고리의 '분유' 버튼 클릭 (0ml 기록 생성)
-            if (currentStep == 0) {
-                mainHandler.postDelayed(() -> {
-                    AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-                    if (rootNode == null) return;
-
-                    List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
-                    for (AccessibilityNodeInfo node : formulaNodes) {
-                        if (performClickParent(node)) {
-                            currentStep = 1;
-                            break;
-                        }
-                    }
-                }, 600);
-            }
-            // STEP 2: 생성된 목록의 '0 ml' (또는 '0ml') 항목 터치하여 상세 수정창 진입
-            else if (currentStep == 1) {
-                mainHandler.postDelayed(() -> {
-                    AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-                    if (rootNode == null) return;
-
-                    List<AccessibilityNodeInfo> zeroNodes = rootNode.findAccessibilityNodeInfosByText("0 ml");
-                    if (zeroNodes.isEmpty()) {
-                        zeroNodes = rootNode.findAccessibilityNodeInfosByText("0ml");
-                    }
-
-                    for (AccessibilityNodeInfo node : zeroNodes) {
-                        if (performClickParent(node)) {
-                            currentStep = 2;
-                            break;
-                        }
-                    }
-                }, 800);
-            }
-            // STEP 3: 상세 화면에서 선택한 용량 입력 후 우측 상단 '저장' 클릭 및 앱 복귀
-            else if (currentStep == 2) {
-                mainHandler.postDelayed(() -> {
-                    AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-                    if (rootNode == null) return;
-
-                    // 용량 입력창 찾아서 값 변경
-                    AccessibilityNodeInfo editNode = findEditableNode(rootNode);
-                    if (editNode != null) {
-                        performSetText(editNode, MainActivity.selectedAmount);
-                    }
-
-                    // 용량 입력 후 '저장' 버튼 클릭
-                    mainHandler.postDelayed(() -> {
-                        AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
-                        if (saveRootNode == null) return;
-
-                        List<AccessibilityNodeInfo> saveNodes = saveRootNode.findAccessibilityNodeInfosByText("저장");
-                        for (AccessibilityNodeInfo saveNode : saveNodes) {
-                            if (performClickParent(saveNode)) {
-                                break;
-                            }
-                        }
-
-                        // 작업 완료 후 우리 앱으로 복귀
-                        mainHandler.postDelayed(() -> {
-                            Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-                            if (intent != null) {
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                                startActivity(intent);
-                            }
-                            MainActivity.autoRecordPending = false;
-                            currentStep = 0;
-                        }, 800);
-
-                    }, 500);
-
-                }, 800);
-            }
+            runMacroStep();
             return;
         }
 
-        // 2. 바탕화면 위젯 수유 시간 정교 읽기 ("3시간 18분 전" 감지)
+        // 2. 화면에 보이는 실시간 수유 시간 탐색 (베이비타임 앱 화면 또는 위젯)
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
-        findFormulaTimeFromWidget(rootNode);
+        findLatestFormulaTime(rootNode);
     }
 
-    private void findFormulaTimeFromWidget(AccessibilityNodeInfo node) {
+    private void runMacroStep() {
+        if (isProcessingMacro) return;
+
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        if (rootNode == null) return;
+
+        // STEP 0: 메인 화면 상단 '분유' 버튼 터치
+        if (currentStep == 0) {
+            List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
+            for (AccessibilityNodeInfo node : formulaNodes) {
+                if (performClickParent(node)) {
+                    currentStep = 1;
+                    isProcessingMacro = true;
+                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500); // 1.5초 여유
+                    break;
+                }
+            }
+        }
+        // STEP 1: 생성된 목록 항목 '0 ml' 또는 '0ml' 터치
+        else if (currentStep == 1) {
+            List<AccessibilityNodeInfo> zeroNodes = rootNode.findAccessibilityNodeInfosByText("0 ml");
+            if (zeroNodes.isEmpty()) {
+                zeroNodes = rootNode.findAccessibilityNodeInfosByText("0ml");
+            }
+
+            for (AccessibilityNodeInfo node : zeroNodes) {
+                if (performClickParent(node)) {
+                    currentStep = 2;
+                    isProcessingMacro = true;
+                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500);
+                    break;
+                }
+            }
+        }
+        // STEP 2: 수유량 변경 입력 및 '저장' 버튼 터치 후 복귀
+        else if (currentStep == 2) {
+            isProcessingMacro = true;
+
+            // 용량 수정
+            AccessibilityNodeInfo editNode = findEditableNode(rootNode);
+            if (editNode != null) {
+                performSetText(editNode, MainActivity.selectedAmount);
+            }
+
+            // 1초 후 저장 버튼 찾아 클릭
+            mainHandler.postDelayed(() -> {
+                AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
+                if (saveRootNode != null) {
+                    boolean clicked = false;
+                    List<AccessibilityNodeInfo> saveNodes = saveRootNode.findAccessibilityNodeInfosByText("저장");
+                    for (AccessibilityNodeInfo saveNode : saveNodes) {
+                        if (performClickParent(saveNode)) {
+                            clicked = true;
+                            break;
+                        }
+                    }
+
+                    if (!clicked) {
+                        findAndClickSaveNode(saveRootNode);
+                    }
+                }
+
+                // 저장 후 1.2초 대기 후 원터치 앱 복귀
+                mainHandler.postDelayed(() -> {
+                    Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        startActivity(intent);
+                    }
+                    MainActivity.autoRecordPending = false;
+                    currentStep = 0;
+                    isProcessingMacro = false;
+                }, 1200);
+
+            }, 1000);
+        }
+    }
+
+    private void findLatestFormulaTime(AccessibilityNodeInfo node) {
         if (node == null) return;
+
+        // "3시간 31분전" 또는 "3시간 31분 전" 감지 정규식
+        Pattern pattern = Pattern.compile("(\\d+시간\\s*)?(\\d+분\\s*)전");
 
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
-
-            // "3시간 18분 전", "18분 전", "1시간 전" 정규식 패턴 감지
-            Pattern pattern = Pattern.compile("^(?:\\d+시간\\s*)?(?:\\d+분\\s*)?전$");
             Matcher matcher = pattern.matcher(text);
 
             if (matcher.find()) {
-                String formattedText = text + " 먹었어요";
-
-                if (MainActivity.resultTextView != null) {
-                    MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(formattedText));
-                }
+                String matchedTime = matcher.group(0);
+                
+                // 첫 번째 감지된 최신 시간만 취득하고 하위 탐색 중단
+                updateResultText(matchedTime + " 먹었어요");
+                return;
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            findFormulaTimeFromWidget(node.getChild(i));
+            findLatestFormulaTime(node.getChild(i));
+        }
+    }
+
+    private void updateResultText(String text) {
+        if (MainActivity.resultTextView != null) {
+            MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(text));
         }
     }
 
@@ -145,6 +157,24 @@ public class WidgetReadService extends AccessibilityService {
             if (result != null) return result;
         }
         return null;
+    }
+
+    private boolean findAndClickSaveNode(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+
+        if (node.getText() != null && node.getText().toString().contains("저장")) {
+            return performClickParent(node);
+        }
+        if (node.getContentDescription() != null && node.getContentDescription().toString().contains("저장")) {
+            return performClickParent(node);
+        }
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (findAndClickSaveNode(node.getChild(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean performClickParent(AccessibilityNodeInfo node) {
@@ -165,5 +195,6 @@ public class WidgetReadService extends AccessibilityService {
     @Override
     public void onInterrupt() {
         currentStep = 0;
+        isProcessingMacro = false;
     }
 }
