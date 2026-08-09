@@ -10,7 +10,8 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
 
     public static TextView resultTextView;
-    public static boolean autoRecordPending = false; // 자동 기록 동작 상태 플래그
+    public static boolean autoRecordPending = false;
+    public static String selectedAmount = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -18,20 +19,29 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         resultTextView = findViewById(R.id.resultTextView);
-        Button recordButton = findViewById(R.id.recordButton);
 
-        // 분유 자동 기록 버튼 클릭 이벤트
-        recordButton.setOnClickListener(v -> {
-            autoRecordPending = true; // 기록 동작 실행 플래그 ON
+        Button btn100 = findViewById(R.id.btn100);
+        Button btn120 = findViewById(R.id.btn120);
+        Button btn140 = findViewById(R.id.btn140);
+        Button btn160 = findViewById(R.id.btn160);
 
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage("com.daycare.babytime");
-            if (launchIntent != null) {
-                startActivity(launchIntent);
-                Toast.makeText(this, "베이비타임 앱을 실행하여 분유를 기록합니다.", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "베이비타임 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show();
-                autoRecordPending = false;
-            }
-        });
+        btn100.setOnClickListener(v -> startAutoRecord("100"));
+        btn120.setOnClickListener(v -> startAutoRecord("120"));
+        btn140.setOnClickListener(v -> startAutoRecord("140"));
+        btn160.setOnClickListener(v -> startAutoRecord("160"));
+    }
+
+    private void startAutoRecord(String amount) {
+        selectedAmount = amount;
+        autoRecordPending = true;
+
+        Intent launchIntent = getPackageManager().getLaunchIntentForPackage("com.daycare.babytime");
+        if (launchIntent != null) {
+            startActivity(launchIntent);
+            Toast.makeText(this, amount + "ml 분유 기록 진행 중...", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "베이비타임 앱을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show();
+            autoRecordPending = false;
+        }
     }
 }
