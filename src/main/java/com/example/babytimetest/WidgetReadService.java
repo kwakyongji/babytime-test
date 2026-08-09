@@ -11,7 +11,7 @@ import java.util.List;
 
 public class WidgetReadService extends AccessibilityService {
 
-    private int currentStep = 0; // 매크로 단계 (0: 대기, 1: 메인 분유클릭, 2: 목록 클릭, 3: 용량수정 및 저장)
+    private int currentStep = 0; // 매크로 단계 (0: 대기, 1: 메인 분유클릭, 2: 목록 클릭, 3: 저장 및 복귀)
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -20,10 +20,10 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // [핵심] 원터치 분유 기록 자동화 매크로
+        // 1. 원터치 분유 기록 매크로 실행
         if (MainActivity.autoRecordPending && pkg.equals("com.daycare.babytime")) {
 
-            // STEP 1: 베이비타임 실행 -> 상단 '분유' 동그라미 아이콘 터치 (15651.jpg)
+            // STEP 1: 베이비타임 메인 -> '분유' 동그라미 터치
             if (currentStep == 0) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -38,7 +38,7 @@ public class WidgetReadService extends AccessibilityService {
                     }
                 }, 800);
             }
-            // STEP 2: 목록 최상단에 새로 추가된 '분유' 탭 터치 (15655.jpg)
+            // STEP 2: 상단에 추가된 새 '분유' 항목 클릭
             else if (currentStep == 1) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
@@ -54,19 +54,19 @@ public class WidgetReadService extends AccessibilityService {
                     }
                 }, 1000);
             }
-            // STEP 3: 상세 입력창 -> 용량 수정 후 '저장' 버튼 터치 ➡️ 우리 앱으로 복귀 (15657.jpg)
+            // STEP 3: 용량 입력 및 '저장' 후 우리 앱으로 복귀
             else if (currentStep == 2) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
-                    // 용량 입력칸(EditText) 순회 탐색 및 입력 (100, 120, 140, 160)
+                    // 선택된 용량 입력 (100, 120, 140, 160)
                     AccessibilityNodeInfo editNode = findEditableNode(rootNode);
                     if (editNode != null) {
                         performSetText(editNode, MainActivity.selectedAmount);
                     }
 
-                    // 용량 변경 후 0.5초 뒤 '저장' 버튼 클릭
+                    // 0.5초 뒤 '저장' 터치
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
                         if (saveRootNode == null) return;
@@ -78,14 +78,13 @@ public class WidgetReadService extends AccessibilityService {
                             }
                         }
 
-                        // [추가] 저장 완료 후 0.8초 뒤 자동으로 다시 우리 앱으로 복귀!
+                        // 저장 완료 후 0.8초 뒤 우리 앱 화면으로 자동 복귀
                         new Handler(Looper.getMainLooper()).postDelayed(() -> {
                             Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
                             if (intent != null) {
                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                 startActivity(intent);
                             }
-                            // 매크로 완료 및 상태 초기화
                             MainActivity.autoRecordPending = false;
                             currentStep = 0;
                         }, 800);
@@ -97,10 +96,9 @@ public class WidgetReadService extends AccessibilityService {
             return;
         }
 
-        // 자기 자신 앱 이벤트 무시
+        // 2. 홈 화면/위젯 수유 시간 실시간 감지
         if (pkg.equals(getPackageName())) return;
 
-        // 메인 화면 위젯 시간 가공 출력
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
         findFormulaTime(rootNode);
