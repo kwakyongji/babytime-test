@@ -20,7 +20,10 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 1. 원터치 분유 기록 매크로 실행
+        // 🚨 자기 자신(우리 앱) 이벤트는 완전히 무시
+        if (pkg.equals(getPackageName())) return;
+
+        // 1. 원터치 분유 기록 매크로 실행 (베이비타임 앱 내부일 때만)
         if (MainActivity.autoRecordPending && pkg.equals("com.daycare.babytime")) {
 
             // STEP 1: 베이비타임 메인 -> '분유' 동그라미 터치
@@ -60,7 +63,7 @@ public class WidgetReadService extends AccessibilityService {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
-                    // 선택된 용량 입력 (100, 120, 140, 160)
+                    // 선택된 용량 입력
                     AccessibilityNodeInfo editNode = findEditableNode(rootNode);
                     if (editNode != null) {
                         performSetText(editNode, MainActivity.selectedAmount);
@@ -96,9 +99,7 @@ public class WidgetReadService extends AccessibilityService {
             return;
         }
 
-        // 2. 홈 화면/위젯 수유 시간 실시간 감지
-        if (pkg.equals(getPackageName())) return;
-
+        // 2. 외부 화면/위젯 수유 시간 실시간 감지 (우리 앱 제외)
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
         findFormulaTime(rootNode);
@@ -109,8 +110,10 @@ public class WidgetReadService extends AccessibilityService {
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
 
+            // 예외 문구 필터링
             if (text.contains("전화") || text.contains("빅스비") || text.contains("카메라") || 
-                text.contains("메시지") || text.contains("갤러리") || text.contains("설정")) {
+                text.contains("메시지") || text.contains("갤러리") || text.contains("설정") ||
+                text.contains("원터치") || text.contains("기록기")) {
                 return;
             }
 
