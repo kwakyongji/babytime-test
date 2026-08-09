@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 다른 앱(베이비타임) 패키지 조회 권한 -->
+    <queries>
+        <package android:name="com.daycare.babytime" />
+    </queries>
+
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="베이비타임 테스트"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight">
+        android:theme="@style/Theme.BabytimeTest">
 
         <activity
             android:name=".MainActivity"
@@ -29,5 +36,4 @@
         </service>
 
     </application>
-
 </manifest>
