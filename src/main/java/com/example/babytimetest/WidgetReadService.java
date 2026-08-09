@@ -1,62 +1,93 @@
 package com.example.babytimetest;
 
 import android.accessibilityservice.AccessibilityService;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import java.util.ArrayList;
 import java.util.List;
 
 public class WidgetReadService extends AccessibilityService {
 
+    private boolean isStep1Done = false;
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // 자기 자신 앱 화면의 변화는 무시 (무한 루프 방지)
-        if (event.getPackageName() != null && 
-            event.getPackageName().toString().equals(getPackageName())) {
+        CharSequence packageName = event.getPackageName();
+        if (packageName == null) return;
+
+        String pkg = packageName.toString();
+
+        // 1. 자동 입력 로직 (베이비타임 앱이 열렸을 때 작동)
+        if (MainActivity.autoRecordPending && pkg.equals("com.daycare.babytime")) {
+            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+            if (rootNode != null) {
+                // Step 1: 상단 '분유' 버튼 클릭
+                if (!isStep1Done) {
+                    List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
+                    for (AccessibilityNodeInfo node : formulaNodes) {
+                        if (performClickParent(node)) {
+                            isStep1Done = true;
+                            // Step 2: 1초 뒤 '저장' 또는 '확인' 버튼 클릭
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                AccessibilityNodeInfo newRoot = getRootInActiveWindow();
+                                if (newRoot != null) {
+                                    List<AccessibilityNodeInfo> saveNodes = newRoot.findAccessibilityNodeInfosByText("저장");
+                                    if (saveNodes.isEmpty()) {
+                                        saveNodes = newRoot.findAccessibilityNodeInfosByText("확인");
+                                    }
+                                    for (AccessibilityNodeInfo saveNode : saveNodes) {
+                                        performClickParent(saveNode);
+                                    }
+                                }
+                                MainActivity.autoRecordPending = false;
+                                isStep1Done = false;
+                            }, 1000);
+                            break;
+                        }
+                    }
+                }
+            }
             return;
         }
 
+        // 2. 자기 자신 앱 이벤트 무시
+        if (pkg.equals(getPackageName())) return;
+
+        // 3. 위젯 읽기 로직 ("분유 X분전" 정보만 감지)
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
 
-        List<String> collectedTexts = new ArrayList<>();
-        collectWidgetText(rootNode, collectedTexts);
-
-        // '분유', '수유', '기저귀', '대변', '소변', '수면' 등의 핵심 정보가 들어있는 경우만 정제해서 표시
-        StringBuilder result = new StringBuilder();
-        for (String text : collectedTexts) {
-            if (text.contains("분유") || text.contains("수유") || text.contains("수면") || 
-                text.contains("대변") || text.contains("소변") || text.contains("기저귀") || 
-                text.contains("ml")) {
-                
-                // 불필요한 시스템 텍스트나 앱 자체 문구 제외
-                if (!text.contains("성공") && !text.contains("전화") && !text.contains("빅스비")) {
-                    result.append("• ").append(text).append("\n");
-                }
-            }
-        }
-
-        if (result.length() > 0 && MainActivity.resultTextView != null) {
-            String finalMsg = "✅ 베이비타임 위젯 감지 완료!\n\n[현재 기록 상태]\n" + result.toString();
-            MainActivity.resultTextView.post(() -> 
-                MainActivity.resultTextView.setText(finalMsg)
-            );
-        }
+        findFormulaTextOnly(rootNode);
     }
 
-    private void collectWidgetText(AccessibilityNodeInfo node, List<String> list) {
+    private void findFormulaTextOnly(AccessibilityNodeInfo node) {
         if (node == null) return;
 
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
-            if (!text.isEmpty()) {
-                list.add(text);
+
+            // "분유" 단어가 포함되어 있고 "전"이 들어가는 최신 기록 형태만 감지 (예: "분유 6분전", "분유 3시간전")
+            if (text.startsWith("분유") && (text.contains("전") || text.contains("분") || text.contains("시간"))) {
+                if (MainActivity.resultTextView != null) {
+                    MainActivity.resultTextView.post(() ->
+                        MainActivity.resultTextView.setText("🍼 최근 분유 기록:\n\n" + text)
+                    );
+                }
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            collectWidgetText(node.getChild(i), list);
+            findFormulaTextOnly(node.getChild(i));
         }
+    }
+
+    private boolean performClickParent(AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        if (node.isClickable()) {
+            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        }
+        return performClickParent(node.getParent());
     }
 
     @Override
