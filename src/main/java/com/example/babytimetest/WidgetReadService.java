@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,24 +20,23 @@ public class WidgetReadService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        if (rootNode == null) return;
+
         CharSequence packageName = event.getPackageName();
-        if (packageName == null) return;
+        String pkg = packageName != null ? packageName.toString() : "";
 
-        String pkg = packageName.toString();
-
-        // 우리 앱 이벤트는 무시
+        // 우리 앱 내부 이벤트는 제외
         if (pkg.equals(getPackageName())) return;
 
-        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 앱 내부)
+        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 앱 실행 중)
         if (MainActivity.autoRecordPending && pkg.equals("yducky.application.babytime")) {
             runMacroStep();
             return;
         }
 
-        // 2. 화면에 보이는 실시간 수유 시간 탐색 (베이비타임 앱 화면 또는 위젯)
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) return;
-        findLatestFormulaTime(rootNode);
+        // 2. 바탕화면 위젯 / 베이비타임 앱의 수유 시간 추출
+        extractLatestFeedingTime(rootNode);
     }
 
     private void runMacroStep() {
@@ -45,19 +45,19 @@ public class WidgetReadService extends AccessibilityService {
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
 
-        // STEP 0: 메인 화면 상단 '분유' 버튼 터치
+        // STEP 0: 메인 화면 상단 '분유' 버튼 클릭
         if (currentStep == 0) {
             List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
             for (AccessibilityNodeInfo node : formulaNodes) {
                 if (performClickParent(node)) {
                     currentStep = 1;
                     isProcessingMacro = true;
-                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500); // 1.5초 여유
+                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500);
                     break;
                 }
             }
         }
-        // STEP 1: 생성된 목록 항목 '0 ml' 또는 '0ml' 터치
+        // STEP 1: 생성된 목록 항목 '0 ml' 또는 '0ml' 클릭
         else if (currentStep == 1) {
             List<AccessibilityNodeInfo> zeroNodes = rootNode.findAccessibilityNodeInfosByText("0 ml");
             if (zeroNodes.isEmpty()) {
@@ -73,7 +73,7 @@ public class WidgetReadService extends AccessibilityService {
                 }
             }
         }
-        // STEP 2: 수유량 변경 입력 및 '저장' 버튼 터치 후 복귀
+        // STEP 2: 용량 변경 입력 및 우측 상단 '저장' 클릭 후 앱 복귀
         else if (currentStep == 2) {
             isProcessingMacro = true;
 
@@ -117,27 +117,37 @@ public class WidgetReadService extends AccessibilityService {
         }
     }
 
-    private void findLatestFormulaTime(AccessibilityNodeInfo node) {
-        if (node == null) return;
+    // 화면 내(위젯 포함)에서 수유 시간 텍스트 추출
+    private void extractLatestFeedingTime(AccessibilityNodeInfo rootNode) {
+        List<String> foundTimes = new ArrayList<>();
+        collectTimeTexts(rootNode, foundTimes);
 
-        // "3시간 31분전" 또는 "3시간 31분 전" 감지 정규식
-        Pattern pattern = Pattern.compile("(\\d+시간\\s*)?(\\d+분\\s*)전");
+        if (!foundTimes.isEmpty()) {
+            // 가장 먼저 발견된 최신 수유 시간 표시
+            String latestTime = foundTimes.get(0);
+            updateResultText(latestTime + " 먹었어요");
+        }
+    }
+
+    private void collectTimeTexts(AccessibilityNodeInfo node, List<String> timesList) {
+        if (node == null) return;
 
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
+            
+            // "분유 3시간 18분 전", "3시간 18분전", "18분 전" 등 다양한 위젯/앱 패턴 모두 매칭
+            Pattern pattern = Pattern.compile("(?:분유\\s*)?((\\d+시간\\s*)?\\d+분\\s*전)");
             Matcher matcher = pattern.matcher(text);
 
             if (matcher.find()) {
-                String matchedTime = matcher.group(0);
-                
-                // 첫 번째 감지된 최신 시간만 취득하고 하위 탐색 중단
-                updateResultText(matchedTime + " 먹었어요");
-                return;
+                // "분유 " 단어를 제외한 순수 시간 문자열만 추출 (예: "3시간 18분 전")
+                String cleanTime = matcher.group(1).trim();
+                timesList.add(cleanTime);
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            findLatestFormulaTime(node.getChild(i));
+            collectTimeTexts(node.getChild(i), timesList);
         }
     }
 
