@@ -3,55 +3,59 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
-    android:background="#F8F9FA">
+    android:padding="28dp"
+    android:background="#F4F6F9">
 
+    <!-- 타이틀 영역 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="베이비타임 원터치 기록기"
-        android:textSize="22sp"
+        android:textSize="24sp"
         android:textStyle="bold"
-        android:textColor="#333333"
-        android:layout_marginBottom="20dp" />
+        android:textColor="#1F2937"
+        android:layout_marginBottom="24dp" />
 
-    <!-- 최근 수유 시간 표시 카드 -->
+    <!-- 최근 수유 시간 정보 카드 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp"
+        android:padding="24dp"
         android:background="#FFFFFF"
-        android:elevation="2dp"
-        android:layout_marginBottom="24dp">
+        android:elevation="4dp"
+        android:layout_marginBottom="32dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="📍 최근 수유 기록"
             android:textSize="15sp"
-            android:textColor="#666666" />
+            android:textStyle="bold"
+            android:textColor="#6B7280" />
 
         <TextView
             android:id="@+id/resultTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="위젯 읽는 중..."
-            android:textSize="70sp"
+            android:textSize="76sp"
             android:textStyle="bold"
-            android:textColor="#2A75D3"
-            android:layout_marginTop="10dp" />
+            android:textColor="#2563EB"
+            android:layout_marginTop="12dp" />
     </LinearLayout>
 
+    <!-- 버튼 섹션 헤더 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="🍼 원터치 기록 버튼"
-        android:textSize="16sp"
+        android:text="🍼 원터치 분유 기록"
+        android:textSize="18sp"
         android:textStyle="bold"
-        android:textColor="#333333"
-        android:layout_marginBottom="12dp" />
+        android:textColor="#1F2937"
+        android:layout_marginBottom="16dp" />
 
+    <!-- 4개 버튼 영역 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -61,33 +65,49 @@
         <Button
             android:id="@+id/btn100"
             android:layout_width="0dp"
-            android:layout_height="60dp"
+            android:layout_height="68dp"
             android:layout_weight="1"
-            android:text="100ml"
-            android:layout_marginEnd="4dp" />
+            android:text="100 ml"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="#2563EB"
+            android:backgroundTint="#EFF6FF"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btn120"
             android:layout_width="0dp"
-            android:layout_height="60dp"
+            android:layout_height="68dp"
             android:layout_weight="1"
-            android:text="120ml"
-            android:layout_marginEnd="4dp" />
+            android:text="120 ml"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="#2563EB"
+            android:backgroundTint="#EFF6FF"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btn140"
             android:layout_width="0dp"
-            android:layout_height="60dp"
+            android:layout_height="68dp"
             android:layout_weight="1"
-            android:text="140ml"
-            android:layout_marginEnd="4dp" />
+            android:text="140 ml"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="#2563EB"
+            android:backgroundTint="#EFF6FF"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btn160"
             android:layout_width="0dp"
-            android:layout_height="60dp"
+            android:layout_height="68dp"
             android:layout_weight="1"
-            android:text="160ml" />
+            android:text="160 ml"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#2563EB" />
     </LinearLayout>
 
 </LinearLayout>
