@@ -1,52 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp">
+    android:background="#F5F5FA"
+    android:padding="20dp">
 
-    <!-- 결과 및 상태 표시 텍스트 -->
+    <!-- 헤더 -->
     <TextView
-        android:id="@+id/resultTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="수유 기록 대기 중..."
+        android:text="베이비타임 원터치 기록기"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:layout_marginBottom="32dp"
-        android:gravity="center" />
+        android:textColor="#333333"
+        android:layout_marginBottom="20dp" />
 
-    <!-- 용량 선택 및 자동 기록 버튼들 -->
-    <Button
-        android:id="@+id/btn100"
-        android:layout_width="200dp"
+    <!-- 수유 상태 카드 -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="100 ml 기록"
+        android:layout_marginBottom="24dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📍 최근 수유 기록"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#666666"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/resultTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="기록 불러오는 중..."
+                android:textSize="30sp"
+                android:textStyle="bold"
+                android:textColor="#6A4C93"
+                android:gravity="center"
+                android:paddingVertical="16dp" />
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 원터치 분유 기록 타일 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🍼 원터치 분유 기록"
         android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#333333"
         android:layout_marginBottom="12dp" />
 
-    <Button
-        android:id="@+id/btn120"
-        android:layout_width="200dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="120 ml 기록"
-        android:textSize="16sp"
-        android:layout_marginBottom="12dp" />
+        android:orientation="horizontal"
+        android:weightSum="4">
 
-    <Button
-        android:id="@+id/btn140"
-        android:layout_width="200dp"
-        android:layout_height="wrap_content"
-        android:text="140 ml 기록"
-        android:textSize="16sp"
-        android:layout_marginBottom="12dp" />
+        <Button
+            android:id="@+id/btn100"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:text="100 ML"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#6A4C93"
+            android:backgroundTint="#EDE7F6"
+            app:cornerRadius="12dp" />
 
-    <Button
-        android:id="@+id/btn160"
-        android:layout_width="200dp"
-        android:layout_height="wrap_content"
-        android:text="160 ml 기록"
-        android:textSize="16sp" />
+        <Button
+            android:id="@+id/btn120"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:text="120 ML"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#6A4C93"
+            android:backgroundTint="#EDE7F6"
+            app:cornerRadius="12dp" />
+
+        <Button
+            android:id="@+id/btn140"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:text="140 ML"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#6A4C93"
+            android:backgroundTint="#EDE7F6"
+            app:cornerRadius="12dp" />
+
+        <Button
+            android:id="@+id/btn160"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:text="160 ML"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#6A4C93"
+            android:backgroundTint="#EDE7F6"
+            app:cornerRadius="12dp" />
+
+    </LinearLayout>
 
 </LinearLayout>
