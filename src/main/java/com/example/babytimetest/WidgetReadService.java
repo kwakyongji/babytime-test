@@ -1,6 +1,7 @@
 package com.example.babytimetest;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,7 +45,6 @@ public class WidgetReadService extends AccessibilityService {
                     if (rootNode == null) return;
 
                     List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
-                    // 상단 버튼(첫번째)이 아닌 목록에 생성된 새 리스트 항목 클릭
                     for (int i = formulaNodes.size() - 1; i >= 0; i--) {
                         AccessibilityNodeInfo node = formulaNodes.get(i);
                         if (performClickParent(node)) {
@@ -54,29 +54,16 @@ public class WidgetReadService extends AccessibilityService {
                     }
                 }, 1000);
             }
-            // STEP 3: 상세 입력창 -> 용량 수정 후 '저장' 버튼 터치 (15657.jpg)
+            // STEP 3: 상세 입력창 -> 용량 수정 후 '저장' 버튼 터치 ➡️ 우리 앱으로 복귀 (15657.jpg)
             else if (currentStep == 2) {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     AccessibilityNodeInfo rootNode = getRootInActiveWindow();
                     if (rootNode == null) return;
 
-                    // 용량 입력칸(EditText) 찾아서 값 변경 (예: 120)
-                    boolean isSet = false;
-                    List<AccessibilityNodeInfo> editTexts = rootNode.findAccessibilityNodeInfosByClassName("android.widget.EditText");
-                    for (AccessibilityNodeInfo etNode : editTexts) {
-                        if (etNode.isEditable()) {
-                            performSetText(etNode, MainActivity.selectedAmount);
-                            isSet = true;
-                            break;
-                        }
-                    }
-
-                    // EditText를 인식 못할 경우 'ml' 노드를 찾아 입력 시도
-                    if (!isSet) {
-                        List<AccessibilityNodeInfo> mlNodes = rootNode.findAccessibilityNodeInfosByText("ml");
-                        for (AccessibilityNodeInfo mlNode : mlNodes) {
-                            performSetText(mlNode, MainActivity.selectedAmount);
-                        }
+                    // 용량 입력칸(EditText) 순회 탐색 및 입력 (100, 120, 140, 160)
+                    AccessibilityNodeInfo editNode = findEditableNode(rootNode);
+                    if (editNode != null) {
+                        performSetText(editNode, MainActivity.selectedAmount);
                     }
 
                     // 용량 변경 후 0.5초 뒤 '저장' 버튼 클릭
@@ -91,9 +78,18 @@ public class WidgetReadService extends AccessibilityService {
                             }
                         }
 
-                        // 매크로 완료 및 초기화
-                        MainActivity.autoRecordPending = false;
-                        currentStep = 0;
+                        // [추가] 저장 완료 후 0.8초 뒤 자동으로 다시 우리 앱으로 복귀!
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                            if (intent != null) {
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                startActivity(intent);
+                            }
+                            // 매크로 완료 및 상태 초기화
+                            MainActivity.autoRecordPending = false;
+                            currentStep = 0;
+                        }, 800);
+
                     }, 500);
 
                 }, 1000);
@@ -104,7 +100,7 @@ public class WidgetReadService extends AccessibilityService {
         // 자기 자신 앱 이벤트 무시
         if (pkg.equals(getPackageName())) return;
 
-        // 메인 화면 위젯 시간 가공 출력 ("0시간 6분전에 먹었어요")
+        // 메인 화면 위젯 시간 가공 출력
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
         findFormulaTime(rootNode);
@@ -139,6 +135,18 @@ public class WidgetReadService extends AccessibilityService {
         for (int i = 0; i < node.getChildCount(); i++) {
             findFormulaTime(node.getChild(i));
         }
+    }
+
+    private AccessibilityNodeInfo findEditableNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (node.isEditable() || (node.getClassName() != null && node.getClassName().toString().contains("EditText"))) {
+            return node;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo result = findEditableNode(node.getChild(i));
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private boolean performClickParent(AccessibilityNodeInfo node) {
