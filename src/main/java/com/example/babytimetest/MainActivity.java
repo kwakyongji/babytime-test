@@ -1,6 +1,10 @@
 package com.example.babytimetest;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.widget.Button;
@@ -10,10 +14,23 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
-    public static TextView resultTextView;
+    private TextView resultTextView;
     public static String selectedAmount = "140";
     public static boolean autoRecordPending = false;
     public static int macroStep = 0;
+
+    // 서비스로부터 최신 수유 시간을 전달받는 안전한 수신기
+    private final BroadcastReceiver timeUpdateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent != null && intent.hasExtra("feeding_time")) {
+                String timeStr = intent.getStringExtra("feeding_time");
+                if (resultTextView != null) {
+                    resultTextView.setText(timeStr);
+                }
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,6 +50,26 @@ public class MainActivity extends AppCompatActivity {
         btn160.setOnClickListener(v -> startFormulaMacro("160"));
 
         checkAccessibilityPermission();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 브로드캐스트 리시버 등록
+        IntentFilter filter = new IntentFilter("com.example.babytimetest.UPDATE_TIME");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(timeUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(timeUpdateReceiver, filter);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        try {
+            unregisterReceiver(timeUpdateReceiver);
+        } catch (Exception ignored) {}
     }
 
     private void startFormulaMacro(String amount) {
