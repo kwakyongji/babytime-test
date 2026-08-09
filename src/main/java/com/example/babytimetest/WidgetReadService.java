@@ -18,7 +18,7 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 1. 자동 입력 동작 (베이비타임 앱이 열렸을 때)
+        // 1. 자동 입력 동작 (베이비타임 실행 시)
         if (MainActivity.autoRecordPending && pkg.equals("com.daycare.babytime")) {
             AccessibilityNodeInfo rootNode = getRootInActiveWindow();
             if (rootNode != null) {
@@ -52,37 +52,40 @@ public class WidgetReadService extends AccessibilityService {
         // 2. 자기 자신 앱 이벤트 무시
         if (pkg.equals(getPackageName())) return;
 
-        // 3. 위젯 읽기 로직 ("분유 X분전" 진짜 기록만 감지)
+        // 3. 위젯 텍스트를 "X시간 Y분전에 먹었어요" 형태로 다듬어 출력
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
 
-        findFormulaTextOnly(rootNode);
+        findFormulaTime(rootNode);
     }
 
-    private void findFormulaTextOnly(AccessibilityNodeInfo node) {
+    private void findFormulaTime(AccessibilityNodeInfo node) {
         if (node == null) return;
 
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
 
-            // [차단 목록] 독바 아이콘이나 시스템 문구는 완전 무시
-            if (text.contains("전화") || text.contains("빅스비") || text.contains("카메라") || 
-                text.contains("메시지") || text.contains("갤러리") || text.contains("설정")) {
-                return;
-            }
-
-            // 오직 "분유" 단어가 함께 들어있는 경우만 허용
             if (text.contains("분유") && (text.contains("전") || text.contains("분") || text.contains("시간"))) {
+                // "분유 6분전" -> "0시간 6분전에 먹었어요" 형태로 가공
+                String formatted = text.replace("분유", "").trim();
+                if (!formatted.contains("시간")) {
+                    formatted = "0시간 " + formatted;
+                }
+                if (!formatted.endsWith("에 먹었어요")) {
+                    formatted = formatted + "에 먹었어요";
+                }
+
+                String finalOutput = formatted;
                 if (MainActivity.resultTextView != null) {
                     MainActivity.resultTextView.post(() ->
-                        MainActivity.resultTextView.setText("🍼 최근 분유 기록:\n\n" + text)
+                        MainActivity.resultTextView.setText(finalOutput)
                     );
                 }
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            findFormulaTextOnly(node.getChild(i));
+            findFormulaTime(node.getChild(i));
         }
     }
 
