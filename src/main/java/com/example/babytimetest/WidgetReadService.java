@@ -1,20 +1,17 @@
 package com.example.babytimetest;
 
 import android.accessibilityservice.AccessibilityService;
-import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class WidgetReadService extends AccessibilityService {
 
-    private int currentStep = 0;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean isProcessingMacro = false;
 
@@ -23,138 +20,119 @@ public class WidgetReadService extends AccessibilityService {
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
 
-        CharSequence packageName = event.getPackageName();
-        String pkg = packageName != null ? packageName.toString() : "";
-
-        // 우리 앱 내부 이벤트는 제외
-        if (pkg.equals(getPackageName())) return;
-
-        // 1. 원터치 분유 자동 기록 매크로 (베이비타임 앱 실행 중)
-        if (MainActivity.autoRecordPending && pkg.equals("yducky.application.babytime")) {
-            runMacroStep();
-            return;
+        // 1. 원터치 매크로 실행 (분할 화면 모드)
+        if (MainActivity.autoRecordPending) {
+            runSplitScreenMacro(rootNode);
         }
 
-        // 2. 바탕화면 위젯 / 베이비타임 앱의 수유 시간 추출
-        extractLatestFeedingTime(rootNode);
+        // 2. 실시간 '마지막 수유' 시간 추출 (분할 화면 모드)
+        extractLastFeedingTime(rootNode);
     }
 
-    private void runMacroStep() {
+    // 분할 화면에 떠 있는 베이비타임 화면을 대상으로 순차 클릭 수행
+    private void runSplitScreenMacro(AccessibilityNodeInfo rootNode) {
         if (isProcessingMacro) return;
 
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) return;
-
-        // STEP 0: 메인 화면 상단 '분유' 버튼 클릭
-        if (currentStep == 0) {
-            List<AccessibilityNodeInfo> formulaNodes = rootNode.findAccessibilityNodeInfosByText("분유");
-            for (AccessibilityNodeInfo node : formulaNodes) {
-                if (performClickParent(node)) {
-                    currentStep = 1;
-                    isProcessingMacro = true;
-                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500);
-                    break;
-                }
+        // STEP 0: 베이비타임 화면의 '분유' 아이콘 클릭
+        if (MainActivity.macroStep == 0) {
+            AccessibilityNodeInfo formulaNode = findNodeByText(rootNode, "분유");
+            if (formulaNode != null && performClickParent(formulaNode)) {
+                MainActivity.macroStep = 1;
+                isProcessingMacro = true;
+                mainHandler.postDelayed(() -> isProcessingMacro = false, 800);
             }
         }
-        // STEP 1: 생성된 목록 항목 '0 ml' 또는 '0ml' 클릭
-        else if (currentStep == 1) {
-            List<AccessibilityNodeInfo> zeroNodes = rootNode.findAccessibilityNodeInfosByText("0 ml");
-            if (zeroNodes.isEmpty()) {
-                zeroNodes = rootNode.findAccessibilityNodeInfosByText("0ml");
-            }
-
-            for (AccessibilityNodeInfo node : zeroNodes) {
-                if (performClickParent(node)) {
-                    currentStep = 2;
-                    isProcessingMacro = true;
-                    mainHandler.postDelayed(() -> isProcessingMacro = false, 1500);
-                    break;
-                }
-            }
-        }
-        // STEP 2: 용량 변경 입력 및 우측 상단 '저장' 클릭 후 앱 복귀
-        else if (currentStep == 2) {
+        // STEP 1: 용량 입력 및 '저장' 클릭
+        else if (MainActivity.macroStep == 1) {
             isProcessingMacro = true;
 
-            // 용량 수정
+            // 1) 용량 텍스트 입력창 찾아서 값 설정
             AccessibilityNodeInfo editNode = findEditableNode(rootNode);
             if (editNode != null) {
                 performSetText(editNode, MainActivity.selectedAmount);
             }
 
-            // 1초 후 저장 버튼 찾아 클릭
+            // 2) 0.6초 대기 후 저장 버튼 클릭
             mainHandler.postDelayed(() -> {
-                AccessibilityNodeInfo saveRootNode = getRootInActiveWindow();
-                if (saveRootNode != null) {
-                    boolean clicked = false;
-                    List<AccessibilityNodeInfo> saveNodes = saveRootNode.findAccessibilityNodeInfosByText("저장");
-                    for (AccessibilityNodeInfo saveNode : saveNodes) {
-                        if (performClickParent(saveNode)) {
-                            clicked = true;
-                            break;
-                        }
-                    }
-
-                    if (!clicked) {
-                        findAndClickSaveNode(saveRootNode);
+                AccessibilityNodeInfo currentRoot = getRootInActiveWindow();
+                if (currentRoot != null) {
+                    AccessibilityNodeInfo saveNode = findNodeByText(currentRoot, "저장");
+                    if (saveNode != null) {
+                        performClickParent(saveNode);
                     }
                 }
 
-                // 저장 후 1.2초 대기 후 원터치 앱 복귀
+                // 매크로 완료 처리
                 mainHandler.postDelayed(() -> {
-                    Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-                    if (intent != null) {
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                        startActivity(intent);
-                    }
                     MainActivity.autoRecordPending = false;
-                    currentStep = 0;
+                    MainActivity.macroStep = 0;
                     isProcessingMacro = false;
-                }, 1200);
+                }, 800);
 
-            }, 1000);
+            }, 600);
         }
     }
 
-    // 화면 내(위젯 포함)에서 수유 시간 텍스트 추출
-    private void extractLatestFeedingTime(AccessibilityNodeInfo rootNode) {
-        List<String> foundTimes = new ArrayList<>();
-        collectTimeTexts(rootNode, foundTimes);
-
-        if (!foundTimes.isEmpty()) {
-            // 가장 먼저 발견된 최신 수유 시간 표시
-            String latestTime = foundTimes.get(0);
-            updateResultText(latestTime + " 먹었어요");
-        }
-    }
-
-    private void collectTimeTexts(AccessibilityNodeInfo node, List<String> timesList) {
+    // '마지막 수유' 바로 옆/아래에 연결된 시간 문자열만 핀포인트로 읽어오기
+    private void extractLastFeedingTime(AccessibilityNodeInfo node) {
         if (node == null) return;
+
+        // "마지막 수유" 라는 라벨 노드를 탐색
+        if (node.getText() != null && node.getText().toString().trim().equals("마지막 수유")) {
+            AccessibilityNodeInfo parent = node.getParent();
+            if (parent != null) {
+                // 부모 노드나 형제 노드들 중 시간 패턴(예: 3시간 54분전)을 찾음
+                String feedingTime = findTimeInNodeTree(parent);
+                if (feedingTime != null) {
+                    updateResultText(feedingTime + " 먹었어요");
+                    return;
+                }
+            }
+        }
+
+        // 전체 트리 재귀 탐색
+        for (int i = 0; i < node.getChildCount(); i++) {
+            extractLastFeedingTime(node.getChild(i));
+        }
+    }
+
+    private String findTimeInNodeTree(AccessibilityNodeInfo node) {
+        if (node == null) return null;
 
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
-            
-            // "분유 3시간 18분 전", "3시간 18분전", "18분 전" 등 다양한 위젯/앱 패턴 모두 매칭
-            Pattern pattern = Pattern.compile("(?:분유\\s*)?((\\d+시간\\s*)?\\d+분\\s*전)");
-            Matcher matcher = pattern.matcher(text);
-
-            if (matcher.find()) {
-                // "분유 " 단어를 제외한 순수 시간 문자열만 추출 (예: "3시간 18분 전")
-                String cleanTime = matcher.group(1).trim();
-                timesList.add(cleanTime);
+            // 기저귀, 대변, 수면 등의 키워드가 들어있는 노드는 걸러냄
+            if (!text.contains("기저귀") && !text.contains("대변") && !text.contains("수면")) {
+                Pattern pattern = Pattern.compile("(\\d+시간\\s*)?(\\d+분\\s*)전");
+                Matcher matcher = pattern.matcher(text);
+                if (matcher.find()) {
+                    return matcher.group(0).trim();
+                }
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            collectTimeTexts(node.getChild(i), timesList);
+            String res = findTimeInNodeTree(node.getChild(i));
+            if (res != null) return res;
         }
+        return null;
     }
 
-    private void updateResultText(String text) {
-        if (MainActivity.resultTextView != null) {
-            MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(text));
+    private AccessibilityNodeInfo findNodeByText(AccessibilityNodeInfo node, String targetText) {
+        if (node == null) return null;
+
+        if (node.getText() != null && node.getText().toString().contains(targetText)) {
+            return node;
         }
+        if (node.getContentDescription() != null && node.getContentDescription().toString().contains(targetText)) {
+            return node;
+        }
+
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo result = findNodeByText(node.getChild(i), targetText);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private AccessibilityNodeInfo findEditableNode(AccessibilityNodeInfo node) {
@@ -167,24 +145,6 @@ public class WidgetReadService extends AccessibilityService {
             if (result != null) return result;
         }
         return null;
-    }
-
-    private boolean findAndClickSaveNode(AccessibilityNodeInfo node) {
-        if (node == null) return false;
-
-        if (node.getText() != null && node.getText().toString().contains("저장")) {
-            return performClickParent(node);
-        }
-        if (node.getContentDescription() != null && node.getContentDescription().toString().contains("저장")) {
-            return performClickParent(node);
-        }
-
-        for (int i = 0; i < node.getChildCount(); i++) {
-            if (findAndClickSaveNode(node.getChild(i))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean performClickParent(AccessibilityNodeInfo node) {
@@ -202,9 +162,16 @@ public class WidgetReadService extends AccessibilityService {
         return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
     }
 
+    private void updateResultText(String text) {
+        if (MainActivity.resultTextView != null) {
+            MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(text));
+        }
+    }
+
     @Override
     public void onInterrupt() {
-        currentStep = 0;
+        MainActivity.autoRecordPending = false;
+        MainActivity.macroStep = 0;
         isProcessingMacro = false;
     }
 }
