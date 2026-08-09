@@ -2,10 +2,12 @@ package com.example.babytimetest;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.util.List;
 
 public class MainActivity extends Activity {
 
@@ -38,11 +40,27 @@ public class MainActivity extends Activity {
         Toast.makeText(this, amount + "ml 자동 기록을 시작합니다.", Toast.LENGTH_SHORT).show();
 
         Intent intent = getPackageManager().getLaunchIntentForPackage("com.daycare.babytime");
+
+        // 만약 기본 패키지명으로 찾아지지 않으면, 설치된 앱 목록 중 'babytime'이 포함된 앱을 자동 탐색
+        if (intent == null) {
+            Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+            mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> pkgList = getPackageManager().queryIntentActivities(mainIntent, 0);
+
+            for (ResolveInfo info : pkgList) {
+                String pName = info.activityInfo.packageName;
+                if (pName.toLowerCase().contains("babytime")) {
+                    intent = getPackageManager().getLaunchIntentForPackage(pName);
+                    break;
+                }
+            }
+        }
+
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
         } else {
-            Toast.makeText(this, "베이비타임 앱이 설치되어 있지 않습니다.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "베이비타임 앱을 찾을 수 없습니다.", Toast.LENGTH_LONG).show();
         }
     }
 }
