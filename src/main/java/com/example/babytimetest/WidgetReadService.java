@@ -8,6 +8,8 @@ import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class WidgetReadService extends AccessibilityService {
 
@@ -20,7 +22,7 @@ public class WidgetReadService extends AccessibilityService {
 
         String pkg = packageName.toString();
 
-        // 자기 자신(우리 앱) 이벤트 무시
+        // 우리 앱 내부 이벤트는 완전히 무시
         if (pkg.equals(getPackageName())) return;
 
         // 1. 원터치 분유 기록 매크로 실행 (베이비타임 내부일 때)
@@ -96,37 +98,33 @@ public class WidgetReadService extends AccessibilityService {
             return;
         }
 
-        // 2. 바탕화면 위젯 수유 시간 실시간 읽기
+        // 2. 바탕화면 위젯 수유 시간 실시간 읽기 ("3시간 18분 전" 정교 감지)
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode == null) return;
-        findFormulaTime(rootNode);
+        findFormulaTimeFromWidget(rootNode);
     }
 
-    private void findFormulaTime(AccessibilityNodeInfo node) {
+    private void findFormulaTimeFromWidget(AccessibilityNodeInfo node) {
         if (node == null) return;
+
         if (node.getText() != null) {
             String text = node.getText().toString().trim();
 
-            // 우리 앱 내부 문구 감지 방지
-            if (text.contains("베이비타임 원터치") || text.contains("최근 수유") || text.contains("원터치 기록")) {
-                return;
-            }
+            // "3시간 18분 전", "18분 전", "1시간 전" 정규식 패턴 감지
+            Pattern pattern = Pattern.compile("^(?:\\d+시간\\s*)?(?:\\d+분\\s*)?전$");
+            Matcher matcher = pattern.matcher(text);
 
-            if ((text.contains("분유") || text.contains("수유")) && (text.contains("전") || text.contains("분") || text.contains("시간"))) {
-                String formatted = text;
-                if (!formatted.endsWith("에 먹었어요") && !formatted.endsWith("전")) {
-                    formatted = formatted + " 에 먹었어요";
-                }
+            if (matcher.find()) {
+                String formattedText = text + " 먹었어요";
 
-                String finalOutput = formatted;
                 if (MainActivity.resultTextView != null) {
-                    MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(finalOutput));
+                    MainActivity.resultTextView.post(() -> MainActivity.resultTextView.setText(formattedText));
                 }
             }
         }
 
         for (int i = 0; i < node.getChildCount(); i++) {
-            findFormulaTime(node.getChild(i));
+            findFormulaTimeFromWidget(node.getChild(i));
         }
     }
 
